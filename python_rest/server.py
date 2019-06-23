@@ -22,6 +22,7 @@ APP.config['SQLALCHEMY_COMMIT_ON_TEARDOWN'] = True
 DB = SQLAlchemy(APP)
 AUTH = HTTPBasicAuth()
 
+
 def require_apikey(view_function):
     """Returns decorated function for API key."""
     @wraps(view_function)
@@ -33,10 +34,12 @@ def require_apikey(view_function):
             abort(401)
     return decorated_function
 
+
 def get_table_columns_name(query):
     """Returns table columns names for a specific query."""
     aux_str_list = [x[0] for x in query.description]
     return {aux_str_list[i]: i for i in range(0, len(aux_str_list))}
+
 
 def create_connection(db_file):
     """Returns a connection to a database."""
@@ -46,6 +49,7 @@ def create_connection(db_file):
     except BaseException:
         print "Database ERROR: %s" % db_file
         exit(1)
+
 
 def shorten_url(long_url):
     """Returns short url name."""
@@ -67,6 +71,7 @@ def shorten_url(long_url):
 
     return short_url
 
+
 def expand_url(short_url):
     """Returns long url name."""
     conn = create_connection(DBFILE)  # connect to database
@@ -76,16 +81,19 @@ def expand_url(short_url):
     conn.close()
     return long_url
 
+
 def get_clicks_url(long_url):
     """Returns clicks quantity of a specific url."""
     conn = create_connection(DBFILE)  # connect to database
-    queryFetched = conn.cursor().execute('''SELECT clicks FROM urls WHERE url_long_name = '%s' LIMIT 1''' % long_url).fetchone()
-    print queryFetched
+    query_fetched = conn.cursor().execute(
+        '''SELECT clicks FROM urls WHERE url_long_name = '%s' LIMIT 1''' %
+        long_url).fetchone()
     clicks = 0
-    if queryFetched is not None:
-        clicks = queryFetched[0]
+    if query_fetched is not None:
+        clicks = query_fetched[0]
     conn.close()
     return clicks
+
 
 def add_click_url(view_function):
     """Add clicks quantity of a specific url to the database."""
@@ -94,7 +102,11 @@ def add_click_url(view_function):
         """API key decorator."""
         long_url = request.args.get('longUrl', default=None, type=str)
         if long_url is None:
-            long_url = expand_url(request.args.get('shortUrl', default=None, type=str))
+            long_url = expand_url(
+                request.args.get(
+                    'shortUrl',
+                    default=None,
+                    type=str))
         conn = create_connection(DBFILE)  # connect to database
         conn.cursor().execute(
             ''' UPDATE urls
@@ -110,44 +122,56 @@ def add_click_url(view_function):
         return view_function(*args, **kwargs)
     return decorated_function
 
+
 @AUTH.verify_password
 def verify_password(username, password):
-    user = User.query.filter_by(username = username).first()
+    """Verify user passwords callback function."""
+    user = User.query.filter_by(username=username).first()
     if not user or not user.verify_password(password):
         return False
     g.user = user
     return True
 
+
 class User(DB.Model):
+    """User class for login."""
     __tablename__ = 'users'
-    id = DB.Column(DB.Integer, primary_key = True)
-    username = DB.Column(DB.String(32), index = True)
+    id = DB.Column(DB.Integer, primary_key=True)
+    username = DB.Column(DB.String(32), index=True)
     password_hash = DB.Column(DB.String(128))
 
     def hash_password(self, password):
+        """Hash user passwords."""
         self.password_hash = pwd_context.encrypt(password)
 
     def verify_password(self, password):
-        return pwd_context.verify(password, self.password_hash)    
+        """Verify user passwords."""
+        return pwd_context.verify(password, self.password_hash)
 
-@APP.route('/users', methods = ['POST'])
+
+@APP.route('/users', methods=['POST'])
 def new_user():
+    """Create new user."""
     username = request.json.get('username')
     password = request.json.get('password')
     if username is None or password is None:
-        abort(400) # missing arguments
-    if User.query.filter_by(username = username).first() is not None:
-        abort(400) # existing user
-    user = User(username = username)
+        abort(400)  # missing arguments
+    if User.query.filter_by(username=username).first() is not None:
+        abort(400)  # existing user
+    user = User(username=username)
     user.hash_password(password)
     DB.session.add(user)
     DB.session.commit()
-    return jsonify({ 'username': user.username }), 201, {'Location': url_for('get_user', id = user.id, _external = True)}
+    return jsonify({'username': user.username}), 201, {
+        'Location': url_for('get_user', id=user.id, _external=True)}
+
 
 @APP.route('/login')
 @AUTH.login_required
-def get_resource():
+def login():
+    """Login."""
     return jsonify({'data': 'Hello, %s!' % g.user.username})
+
 
 @APP.route('/url', methods=['GET'])
 @require_apikey
@@ -158,6 +182,7 @@ def get_urls():
     columns_names = get_table_columns_name(query)
     return {'urls': [i[columns_names['url_long_name']]
                      for i in query.fetchall()]}
+
 
 @APP.route('/url/info', methods=['GET'])
 @require_apikey
@@ -170,6 +195,7 @@ def get_url_info():
     return jsonify('''{'longUrl': %s, 'shortUrl' : %s, 'clicks' : %d}''' % (
         long_url, short_url, clicks))
 
+
 @APP.route('/url/shorten', methods=['GET'])
 @require_apikey
 @add_click_url
@@ -180,6 +206,7 @@ def get_url_short_name():
     short_url = shorten_url(long_url)
     return jsonify('''{'shortUrl' : %s}''' % (short_url))
 
+
 @APP.route('/url/expand', methods=['GET'])
 @require_apikey
 @add_click_url
@@ -189,6 +216,7 @@ def get_url_long_name():
         'shortUrl', default=None, type=str)
     long_url = expand_url(short_url)
     return jsonify('''{'longUrl': %s}''' % (long_url))
+
 
 @APP.route('/url/clickStats', methods=['GET'])
 @require_apikey
@@ -238,11 +266,13 @@ def get_urls_click_stats():
         return jsonify('''{'longUrl': %s, 'shortUrl' : %s, 'clicks' : %d}''' % (
             long_url, short_url, query.fetchone()[0]))
 
+
 @APP.route('/', methods=['GET'])
 @require_apikey
 def hello_world():
     """API example."""
     return 'Hello world!.'
+
 
 if __name__ == '__main__':
     APP.run(port='5002')
