@@ -25,22 +25,15 @@ Con [ip] = 127.0.0.1
 
 * Crear Usuario
 
-curl -i -X POST \
-   	-H "Content-Type: application/json" \
-   	-d '{"username":"alejo","password":"python"}' \
-   	http://[ip]:5002/api/v1.0/users
+curl -i -X POST -H "Content-Type: application/json" -d '{"username":"alejo","password":"python"}' http://[ip]:5002/api/v1.0/users
 
 * Login
 
-curl -u alejo:python -i -X GET \
-	http://[ip]:5002/api/v1.0/login
+curl -u alejo:python -i -X GET http://[ip]:5002/api/v1.0/login
 
 * Agregar URL
 
-curl -i -X POST \
-  	-H "Content-Type: application/json" \
-  	-d '{"url_long_name":"https://www.youtube.com"}' \
-  	http://[ip]:5002/api/v1.0/add_url
+curl -i -X POST -H "Content-Type: application/json" -d '{"url_long_name":"https://www.youtube.com"}' http://[ip]:5002/api/v1.0/add_url
 
 * Desde el Browser
 
