@@ -1,14 +1,14 @@
-"""JAMPP Url Shorten Restful API."""
+"""Url Shorten Restful API."""
 import sqlite3
 from functools import wraps
 from short_url import encode_url, decode_url
-from flask import Flask, request, abort, url_for, g, jsonify, redirect
-from flask_limiter import Limiter
+from flask import request, abort, url_for, g, jsonify, redirect
 from flask_jsonpify import jsonify
 
-from extensions import DBFILE, APIKEY, RATE_LIMIT, API_VERSION, APP, DB, AUTH, LIMITER, SHARED_LIMITER
+from extensions import DBFILE, APIKEY, API_VERSION, APP, DB, AUTH, LIMITER, SHARED_LIMITER
 from classes import User
 # useful functions
+
 
 def require_apikey(view_function):
     """Returns decorated function for API key."""
@@ -113,7 +113,8 @@ def get_urls():
     conn = create_connection(DBFILE)
     query = conn.cursor().execute("SELECT * FROM urls")
     columns = get_table_columns_name(query)
-    return jsonify({i[columns['url_long_name']]: i[columns['clicks']] for i in query.fetchall()})
+    return jsonify({i[columns['url_long_name']]: i[columns['clicks']]
+                    for i in query.fetchall()})
 
 
 @APP.route('/api/' + API_VERSION + '/url/<short_url>', methods=['GET'])
@@ -134,12 +135,13 @@ def get_redirect(short_url):
     conn.close()
     return redirect(long_url)
 
+
 @APP.route('/api/' + API_VERSION + '/url/add_url', methods=['POST'])
 def post_add_url():
     """API post_add_url()."""
     url_long_name = request.json.get('url_long_name')
     return jsonify('''{
-        'url_long_name' : %s, 
+        'url_long_name' : %s,
         'url_short_name' : %s
         } ''' % (url_long_name, shorten_url(url_long_name)))
 
@@ -235,18 +237,6 @@ def hello_world():
     APP.logger.debug("Api begining")
     return 'Hello world!.'
 
-""" curl -i -X POST \
-   -H "Content-Type: application/json" \
-   -d '{"username":"manuel","password":"python"}' \
-   http://127.0.0.1:5002/api/v1.0/users
-"""
-# curl -i -X POST \
-#   -H "Content-Type: application/json" \
-#   -d '{"url_long_name":"https://www.youtube.com"}' \
-#   http://127.0.0.1:5002/api/v1.0/add_url
-
-# curl -u alejo:python -i -X GET \
-#   http://127.0.0.1:5002/api/v1.0/login
 
 if __name__ == '__main__':
     APP.run(port='5002', debug=False)

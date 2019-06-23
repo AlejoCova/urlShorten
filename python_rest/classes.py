@@ -1,8 +1,9 @@
-"""JAMPP Url Shorten Restful API - CLASSES"""
+"""Url Shorten Restful API - CLASSES"""
 
 from passlib.apps import custom_app_context as pwd_context
-
+from flask import g
 from extensions import DB, AUTH
+
 
 @AUTH.verify_password
 def verify_password(username, password):

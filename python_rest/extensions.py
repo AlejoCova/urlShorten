@@ -1,7 +1,7 @@
-"""JAMPP Url Shorten Restful API - EXTENSIONS"""
+"""Url Shorten Restful API - EXTENSIONS"""
 
 from logging import FileHandler, WARNING
-from flask import Flask, request, abort, url_for, g, jsonify, redirect
+from flask import Flask
 from flask_limiter import Limiter
 from flask_httpauth import HTTPBasicAuth
 from flask_sqlalchemy import SQLAlchemy
@@ -31,4 +31,4 @@ LIMITER = Limiter(
     key_func=get_remote_address,
     default_limits=["10 per minute"]
 )
-SHARED_LIMITER = LIMITER.shared_limit(RATE_LIMIT, scope="JAMPP")
+SHARED_LIMITER = LIMITER.shared_limit(RATE_LIMIT, scope="EXAM")
