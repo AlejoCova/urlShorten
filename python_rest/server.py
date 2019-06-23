@@ -3,6 +3,8 @@ import sqlite3
 from functools import wraps
 from short_url import encode_url, decode_url
 from flask import Flask, request, abort, url_for, g, jsonify
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from flask_jsonpify import jsonify
 from flask_httpauth import HTTPBasicAuth
 from flask_sqlalchemy import SQLAlchemy
@@ -11,6 +13,7 @@ from passlib.apps import custom_app_context as pwd_context
 # constant values
 DBFILE = "./pythonsqlite.db"
 APIKEY = 'ABCDEF123456789'
+RATE_LIMIT = "10/hour"
 
 # initialization
 APP = Flask(__name__)
@@ -21,6 +24,14 @@ APP.config['SQLALCHEMY_COMMIT_ON_TEARDOWN'] = True
 # extensions
 DB = SQLAlchemy(APP)
 AUTH = HTTPBasicAuth()
+LIMITER = Limiter(
+    APP,
+    key_func=get_remote_address,
+    default_limits=["10 per minute"]
+)
+SHARED_LIMITER = LIMITER.shared_limit(RATE_LIMIT, scope="JAMPP")
+
+# useful functions
 
 
 def require_apikey(view_function):
@@ -62,7 +73,7 @@ def shorten_url(long_url):
         url_id = url_id[0] + 1
     conn.cursor().execute(
         ''' INSERT OR IGNORE INTO urls (url_long_name, url_short_name, clicks, date_last_click)
-        VALUES ('%s', '%s', 0, DATETIME('now')) ''' %
+        VALUES ('%s', '%s', 1, DATETIME('now')) ''' %
         (long_url, encode_url(url_id)))
     conn.commit()
     short_url = encode_url(conn.cursor().execute(
@@ -149,6 +160,7 @@ class User(DB.Model):
         return pwd_context.verify(password, self.password_hash)
 
 
+# resources
 @APP.route('/users', methods=['POST'])
 def new_user():
     """Create new user."""
@@ -166,7 +178,7 @@ def new_user():
         'Location': url_for('get_user', id=user.id, _external=True)}
 
 
-@APP.route('/login')
+@APP.route('/login', methods=['GET'])
 @AUTH.login_required
 def login():
     """Login."""
@@ -179,17 +191,16 @@ def get_urls():
     """API get()."""
     conn = create_connection(DBFILE)
     query = conn.cursor().execute("SELECT * FROM urls")
-    columns_names = get_table_columns_name(query)
-    return {'urls': [i[columns_names['url_long_name']]
-                     for i in query.fetchall()]}
+    col_names = get_table_columns_name(query)
+    return jsonify({i[col_names['url_long_name']] : i[col_names['clicks']] for i in query.fetchall()})
 
 
 @APP.route('/url/info', methods=['GET'])
 @require_apikey
+@SHARED_LIMITER
 def get_url_info():
     """API get(apiKey, longUrl)."""
-    long_url = request.args.get(
-        'longUrl', default=None, type=str)
+    long_url = request.args.get('longUrl', default=None, type=str)
     short_url = shorten_url(long_url)
     clicks = get_clicks_url(long_url)
     return jsonify('''{'longUrl': %s, 'shortUrl' : %s, 'clicks' : %d}''' % (
@@ -199,6 +210,7 @@ def get_url_info():
 @APP.route('/url/shorten', methods=['GET'])
 @require_apikey
 @add_click_url
+@SHARED_LIMITER
 def get_url_short_name():
     """API get(apiKey, longUrl)."""
     long_url = request.args.get(
@@ -210,6 +222,7 @@ def get_url_short_name():
 @APP.route('/url/expand', methods=['GET'])
 @require_apikey
 @add_click_url
+@SHARED_LIMITER
 def get_url_long_name():
     """API get(apiKey, shortUrl)."""
     short_url = request.args.get(
@@ -220,6 +233,7 @@ def get_url_long_name():
 
 @APP.route('/url/clickStats', methods=['GET'])
 @require_apikey
+@SHARED_LIMITER
 def get_urls_click_stats():
     """API get(apiKey, shortUrl, from, to)."""
     short_url = request.args.get('shortUrl', default='None', type=str)
@@ -269,10 +283,18 @@ def get_urls_click_stats():
 
 @APP.route('/', methods=['GET'])
 @require_apikey
+@LIMITER.limit("100/hour")
 def hello_world():
     """API example."""
     return 'Hello world!.'
 
+# curl -i -X POST \
+#   -H "Content-Type: application/json"
+#   -d '{"username":"alejo","password":"python"}' \
+#   http://127.0.0.1:5002/users
 
+
+# curl -u alejo:python -i -X GET \
+#   http://127.0.0.1:5002/login
 if __name__ == '__main__':
     APP.run(port='5002')
