@@ -2,7 +2,7 @@
 import sqlite3
 from functools import wraps
 from short_url import encode_url, decode_url
-from flask import Flask, request, abort, url_for, g, jsonify
+from flask import Flask, request, abort, url_for, g, jsonify, redirect
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_jsonpify import jsonify
@@ -14,6 +14,7 @@ from passlib.apps import custom_app_context as pwd_context
 DBFILE = "./pythonsqlite.db"
 APIKEY = 'ABCDEF123456789'
 RATE_LIMIT = "10/hour"
+API_VERSION = 'v1.0'
 
 # initialization
 APP = Flask(__name__)
@@ -161,7 +162,7 @@ class User(DB.Model):
 
 
 # resources
-@APP.route('/users', methods=['POST'])
+@APP.route('/api/' + API_VERSION + '/users', methods=['POST'])
 def new_user():
     """Create new user."""
     username = request.json.get('username')
@@ -178,24 +179,30 @@ def new_user():
         'Location': url_for('get_user', id=user.id, _external=True)}
 
 
-@APP.route('/login', methods=['GET'])
+@APP.route('/api/' + API_VERSION + '/login', methods=['GET'])
 @AUTH.login_required
 def login():
     """Login."""
     return jsonify({'data': 'Hello, %s!' % g.user.username})
 
 
-@APP.route('/url', methods=['GET'])
+@APP.route('/api/' + API_VERSION + '/url', methods=['GET'])
 @require_apikey
 def get_urls():
     """API get()."""
     conn = create_connection(DBFILE)
     query = conn.cursor().execute("SELECT * FROM urls")
-    col_names = get_table_columns_name(query)
-    return jsonify({i[col_names['url_long_name']] : i[col_names['clicks']] for i in query.fetchall()})
+    columns = get_table_columns_name(query)
+    return jsonify({i[columns['url_long_name']]: i[columns['clicks']] for i in query.fetchall()})
 
 
-@APP.route('/url/info', methods=['GET'])
+@APP.route('/api/' + API_VERSION + '/url/<short_url>', methods=['GET'])
+def get_redirect(short_url):
+    """API get_redirect()."""
+    return redirect(expand_url(short_url))
+
+
+@APP.route('/api/' + API_VERSION + '/url/info', methods=['GET'])
 @require_apikey
 @SHARED_LIMITER
 def get_url_info():
@@ -207,19 +214,18 @@ def get_url_info():
         long_url, short_url, clicks))
 
 
-@APP.route('/url/shorten', methods=['GET'])
+@APP.route('/api/' + API_VERSION + '/url/shorten', methods=['GET'])
 @require_apikey
 @add_click_url
 @SHARED_LIMITER
 def get_url_short_name():
     """API get(apiKey, longUrl)."""
-    long_url = request.args.get(
-        'longUrl', default=None, type=str)
+    long_url = request.args.get('longUrl', default=None, type=str)
     short_url = shorten_url(long_url)
     return jsonify('''{'shortUrl' : %s}''' % (short_url))
 
 
-@APP.route('/url/expand', methods=['GET'])
+@APP.route('/api/' + API_VERSION + '/url/expand', methods=['GET'])
 @require_apikey
 @add_click_url
 @SHARED_LIMITER
@@ -231,7 +237,7 @@ def get_url_long_name():
     return jsonify('''{'longUrl': %s}''' % (long_url))
 
 
-@APP.route('/url/clickStats', methods=['GET'])
+@APP.route('/api/' + API_VERSION + '/url/clickStats', methods=['GET'])
 @require_apikey
 @SHARED_LIMITER
 def get_urls_click_stats():
@@ -281,7 +287,7 @@ def get_urls_click_stats():
             long_url, short_url, query.fetchone()[0]))
 
 
-@APP.route('/', methods=['GET'])
+@APP.route('/api/' + API_VERSION + '/', methods=['GET'])
 @require_apikey
 @LIMITER.limit("100/hour")
 def hello_world():
