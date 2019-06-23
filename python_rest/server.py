@@ -2,7 +2,7 @@
 import sqlite3
 from functools import wraps
 from short_url import encode_url, decode_url
-from flask import Flask, request, abort, url_for
+from flask import Flask, request, abort, url_for, g, jsonify
 from flask_jsonpify import jsonify
 from flask_httpauth import HTTPBasicAuth
 from flask_sqlalchemy import SQLAlchemy
