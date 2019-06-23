@@ -42,8 +42,7 @@ def require_apikey(view_function):
         """API key decorator."""
         if request.args.get('apiKey') and request.args.get('apiKey') == APIKEY:
             return view_function(*args, **kwargs)
-        else:
-            abort(401)
+        abort(401)
     return decorated_function
 
 
@@ -59,7 +58,7 @@ def create_connection(db_file):
         conn = sqlite3.connect(db_file)
         return conn
     except BaseException:
-        print "Database ERROR: %s" % db_file
+        APP.logger.error("Database ERROR: %s" % db_file)
         exit(1)
 
 
@@ -291,6 +290,7 @@ def get_urls_click_stats():
 @require_apikey
 @LIMITER.limit("100/hour")
 def hello_world():
+    APP.logger.debug("Api begining")    
     """API example."""
     return 'Hello world!.'
 
