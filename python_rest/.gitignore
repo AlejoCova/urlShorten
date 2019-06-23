@@ -1,1 +1,6 @@
 pythonsqlite.db
+classes.pyc
+dependencies.pyc
+errorLog.txt
+extensions.pyc
+utils.pyc

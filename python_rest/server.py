@@ -4,36 +4,11 @@ from functools import wraps
 from short_url import encode_url, decode_url
 from flask import Flask, request, abort, url_for, g, jsonify, redirect
 from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
 from flask_jsonpify import jsonify
-from flask_httpauth import HTTPBasicAuth
-from flask_sqlalchemy import SQLAlchemy
-from passlib.apps import custom_app_context as pwd_context
 
-# constant values
-DBFILE = "./pythonsqlite.db"
-APIKEY = 'ABCDEF123456789'
-RATE_LIMIT = "10/hour"
-API_VERSION = 'v1.0'
-
-# initialization
-APP = Flask(__name__)
-APP.config['SECRET_KEY'] = 'the quick brown fox jumps over the lazy dog'
-APP.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + DBFILE
-APP.config['SQLALCHEMY_COMMIT_ON_TEARDOWN'] = True
-
-# extensions
-DB = SQLAlchemy(APP)
-AUTH = HTTPBasicAuth()
-LIMITER = Limiter(
-    APP,
-    key_func=get_remote_address,
-    default_limits=["10 per minute"]
-)
-SHARED_LIMITER = LIMITER.shared_limit(RATE_LIMIT, scope="JAMPP")
-
+from extensions import DBFILE, APIKEY, RATE_LIMIT, API_VERSION, APP, DB, AUTH, LIMITER, SHARED_LIMITER
+from classes import User
 # useful functions
-
 
 def require_apikey(view_function):
     """Returns decorated function for API key."""
@@ -106,60 +81,6 @@ def get_clicks_url(long_url):
     return clicks
 
 
-def add_click_url(view_function):
-    """Add clicks quantity of a specific url to the database."""
-    @wraps(view_function)
-    def decorated_function(*args, **kwargs):
-        """API key decorator."""
-        long_url = request.args.get('longUrl', default=None, type=str)
-        if long_url is None:
-            long_url = expand_url(
-                request.args.get(
-                    'shortUrl',
-                    default=None,
-                    type=str))
-        conn = create_connection(DBFILE)  # connect to database
-        conn.cursor().execute(
-            ''' UPDATE urls
-            SET clicks = %d, date_last_click = DATETIME('now')
-            WHERE url_long_name = '%s' ''' %
-            (get_clicks_url(long_url) + 1, long_url))
-        conn.cursor().execute(
-            ''' INSERT INTO urls_clicks (url_long_name, date_click)
-            VALUES ('%s', DATETIME('now')) ''' %
-            (long_url))
-        conn.commit()
-        conn.close()
-        return view_function(*args, **kwargs)
-    return decorated_function
-
-
-@AUTH.verify_password
-def verify_password(username, password):
-    """Verify user passwords callback function."""
-    user = User.query.filter_by(username=username).first()
-    if not user or not user.verify_password(password):
-        return False
-    g.user = user
-    return True
-
-
-class User(DB.Model):
-    """User class for login."""
-    __tablename__ = 'users'
-    id = DB.Column(DB.Integer, primary_key=True)
-    username = DB.Column(DB.String(32), index=True)
-    password_hash = DB.Column(DB.String(128))
-
-    def hash_password(self, password):
-        """Hash user passwords."""
-        self.password_hash = pwd_context.encrypt(password)
-
-    def verify_password(self, password):
-        """Verify user passwords."""
-        return pwd_context.verify(password, self.password_hash)
-
-
 # resources
 @APP.route('/api/' + API_VERSION + '/users', methods=['POST'])
 def new_user():
@@ -175,7 +96,7 @@ def new_user():
     DB.session.add(user)
     DB.session.commit()
     return jsonify({'username': user.username}), 201, {
-        'Location': url_for('get_user', id=user.id, _external=True)}
+        'Location': url_for('new_user', id=user.id, _external=True)}
 
 
 @APP.route('/api/' + API_VERSION + '/login', methods=['GET'])
@@ -198,7 +119,29 @@ def get_urls():
 @APP.route('/api/' + API_VERSION + '/url/<short_url>', methods=['GET'])
 def get_redirect(short_url):
     """API get_redirect()."""
-    return redirect(expand_url(short_url))
+    long_url = expand_url(short_url)
+    conn = create_connection(DBFILE)  # connect to database
+    conn.cursor().execute(
+        ''' UPDATE urls
+        SET clicks = %d, date_last_click = DATETIME('now')
+        WHERE url_long_name = '%s' ''' %
+        (get_clicks_url(long_url) + 1, long_url))
+    conn.cursor().execute(
+        ''' INSERT INTO urls_clicks (url_long_name, date_click)
+        VALUES ('%s', DATETIME('now')) ''' %
+        (long_url))
+    conn.commit()
+    conn.close()
+    return redirect(long_url)
+
+@APP.route('/api/' + API_VERSION + '/url/add_url', methods=['POST'])
+def post_add_url():
+    """API post_add_url()."""
+    url_long_name = request.json.get('url_long_name')
+    return jsonify('''{
+        'url_long_name' : %s, 
+        'url_short_name' : %s
+        } ''' % (url_long_name, shorten_url(url_long_name)))
 
 
 @APP.route('/api/' + API_VERSION + '/url/info', methods=['GET'])
@@ -215,7 +158,6 @@ def get_url_info():
 
 @APP.route('/api/' + API_VERSION + '/url/shorten', methods=['GET'])
 @require_apikey
-@add_click_url
 @SHARED_LIMITER
 def get_url_short_name():
     """API get(apiKey, longUrl)."""
@@ -226,7 +168,6 @@ def get_url_short_name():
 
 @APP.route('/api/' + API_VERSION + '/url/expand', methods=['GET'])
 @require_apikey
-@add_click_url
 @SHARED_LIMITER
 def get_url_long_name():
     """API get(apiKey, shortUrl)."""
@@ -290,17 +231,22 @@ def get_urls_click_stats():
 @require_apikey
 @LIMITER.limit("100/hour")
 def hello_world():
-    APP.logger.debug("Api begining")    
     """API example."""
+    APP.logger.debug("Api begining")
     return 'Hello world!.'
 
+""" curl -i -X POST \
+   -H "Content-Type: application/json" \
+   -d '{"username":"manuel","password":"python"}' \
+   http://127.0.0.1:5002/api/v1.0/users
+"""
 # curl -i -X POST \
-#   -H "Content-Type: application/json"
-#   -d '{"username":"alejo","password":"python"}' \
-#   http://127.0.0.1:5002/users
-
+#   -H "Content-Type: application/json" \
+#   -d '{"url_long_name":"https://www.youtube.com"}' \
+#   http://127.0.0.1:5002/api/v1.0/add_url
 
 # curl -u alejo:python -i -X GET \
-#   http://127.0.0.1:5002/login
+#   http://127.0.0.1:5002/api/v1.0/login
+
 if __name__ == '__main__':
-    APP.run(port='5002')
+    APP.run(port='5002', debug=False)
