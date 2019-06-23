@@ -38,16 +38,17 @@ def main():
                                         url_long_name text NOT NULL,
                                         date_click text NOT NULL
                                     ); """   
-    sql_create_user_password_table = """ CREATE TABLE IF NOT EXISTS user_password (
+    sql_create_user_password_table = """ CREATE TABLE IF NOT EXISTS users (
                                         id integer PRIMARY KEY,
-                                        user text NOT NULL,
-                                        user_password_hash text NOT NULL
+                                        username text NOT NULL,
+                                        password_hash text NOT NULL
                                     ); """                                                                       
  
     conn = create_connection(database)
     if conn is not None:
         create_table(conn, sql_create_urls_table)
         create_table(conn, sql_create_urls_clicks_table)
+        create_table(conn, sql_create_user_password_table)
         conn.close()
     else:
         print("Error! cannot create the database connection.")
